@@ -2,27 +2,73 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 
-int
-main(int argc, char *argv[])
+int sub(int pip[])
 {
-    
-    
-int child_pid, wpid;
-int status = 0;
+    // close write end needs to be placed here
+    // if put after read() at line 12
+    // the last call will not send anything here, thus read is pending here
+    close(pip[1]);
+    int pri;
+    int more = read(pip[0], &pri, 1);
 
-//Father code (before child processes start)
+    if (more != 0)
+    {
+        printf("prime %d\n", pri);
 
-for (int id = 1; id <= 35; id++)
-{
-    if ((child_pid = fork()) == 0) {
-        //child code
-        exit(0);
+        int child_pip[2];
+        pipe(child_pip);
+
+        if (fork() == 0)
+        {
+            sub(child_pip);
+        }
+        else
+        {
+            for (;;)
+            {
+                int d;
+                int ret = read(pip[0], &d, 1);
+                if (ret == 0)
+                {
+                    break;
+                }
+                if (d % pri != 0)
+                {
+                    write(child_pip[1], &d, 1);
+                }
+            }
+            close(pip[0]);
+            close(child_pip[1]);
+            wait(0);
+        }
     }
+
+    exit(0);
 }
 
+int main(int argc, char *argv[])
+{
 
-while ((wpid = wait(&status)) > 0); // this way, the father waits for all the child processes 
+    int p[2];
+    pipe(p);
 
-//Father code (After all child processes end)
-    
+    if (fork() == 0)
+    {
+        sub(p);
+    }
+    else
+    {
+        close(p[0]);
+        printf("prime %d\n", 2);
+        for (uint8 id = 3; id <= 35; id++)
+        {
+            if (id % 2 != 0)
+            {
+                write(p[1], &id, 1);
+            }
+        }
+        close(p[1]);
+        wait(0);
+    }
+    exit(0);
 }

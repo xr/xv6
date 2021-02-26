@@ -286,6 +286,9 @@ userinit(void)
   uvminit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
 
+  // copy user pagetable to kernel page table
+  u2kvmcopy(p->pagetable, p->kpagetable, 0, p->sz);
+
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;      // user program counter
   p->trapframe->sp = PGSIZE;  // user stack pointer
@@ -308,11 +311,16 @@ growproc(int n)
 
   sz = p->sz;
   if(n > 0){
+    // Prevent user processes from growing larger than the PLIC address.
+    if (PGROUNDUP(sz + n) >= PLIC)
+      return -1;
     if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
       return -1;
     }
+    u2kvmcopy(p->pagetable, p->kpagetable, sz-n, sz);
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, sz, sz + n);
+    u2kvmcopy(p->pagetable, p->kpagetable, sz, sz-n);
   }
   p->sz = sz;
   return 0;
@@ -339,7 +347,7 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
-
+  u2kvmcopy(np->pagetable, np->kpagetable, 0, np->sz);
   np->parent = p;
 
   // copy saved user registers.

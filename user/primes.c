@@ -20,7 +20,7 @@ int sub(int pip[])
 
         if (fork() == 0)
         {
-            sub(child_pip);
+            //sub(child_pip);
         }
         else
         {

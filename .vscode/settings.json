@@ -1,0 +1,14 @@
+{
+  "C_Cpp.default.compilerPath": "/usr/bin/gcc",
+  "C_Cpp.default.includePath": [
+    "${workspaceFolder}/**",
+    "/usr/include/**",
+    "${workspaceFolder}/kernel/**"
+  ],
+  "files.associations": {
+    "param.h": "c",
+    "types.h": "c",
+    "stat.h": "c",
+    "proc.h": "c"
+  },
+}

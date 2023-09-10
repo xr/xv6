@@ -1,0 +1,34 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "debug xv6",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/kernel/kernel",
+      "args": [],
+      "stopAtEntry": true,
+      "cwd": "${workspaceFolder}",
+      "miDebuggerServerAddress": "localhost:25502",
+      "miDebuggerPath": "/usr/local/bin/riscv64-unknown-elf-gdb",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "pretty printing",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        },
+        //在这里加载了寄存器信息表
+        {
+          "text": "set tdesc filename myxml.xml",
+        }
+      ],
+      "logging": {
+        // "engineLogging": true,
+        // "programOutput": true,
+      }
+    }
+  ]
+}

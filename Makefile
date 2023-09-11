@@ -23,6 +23,7 @@ OBJS = \
   $K/swtch.o \
   $K/trampoline.o \
   $K/trap.o \
+	$K/sysinfo.o \
   $K/syscall.o \
   $K/sysproc.o \
   $K/bio.o \
@@ -150,6 +151,7 @@ UPROGS=\
 	$U/_wc\
 	$U/_zombie\
 	$U/_trace\
+	$U/_sysinfotest\
 
 
 
@@ -299,3 +301,6 @@ myapi.key:
 
 
 .PHONY: handin tarball tarball-pref clean grade handin-check
+
+gdb:
+	riscv64-unknown-elf-gdb kernel/kernel

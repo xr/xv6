@@ -47,6 +47,36 @@ kvminit()
   kvmmap(TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
 }
 
+void
+printPTE(pagetable_t pagetable, int level)
+{
+  // there are 2^9 = 512 PTEs in a page table.
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
+      // this PTE points to a lower-level page table.
+      uint64 child = PTE2PA(pte);
+      if (level == 1)
+      {
+        printf("..%d: pte %p pa %p\n", i, pte, child);
+      } else if (level == 2) {
+        printf(".. ..%d: pte %p pa %p\n", i, pte, child);
+      }
+      
+      printPTE((pagetable_t)child, level+1);
+    } else if(pte & PTE_V){
+      uint64 child = PTE2PA(pte);
+      printf(".. .. ..%d: pte %p pa %p\n", i, pte, child);
+    }
+  }
+}
+
+void
+vmprint(pagetable_t pagetable) {
+  printf("page table %p\n", pagetable);
+  printPTE(pagetable, 1);
+}
+
 // Switch h/w page table register to the kernel's page table,
 // and enable paging.
 void

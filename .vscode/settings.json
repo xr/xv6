@@ -12,6 +12,7 @@
     "proc.h": "c",
     "__locale": "c",
     "locale": "c",
-    "riscv.h": "c"
+    "riscv.h": "c",
+    "spinlock.h": "c"
   },
 }

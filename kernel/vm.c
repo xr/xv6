@@ -5,6 +5,7 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+
 #include "spinlock.h"
 #include "proc.h"
 
@@ -49,34 +50,17 @@ kvminit()
   kvmmap(TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
 }
 
-void
-printPTE(pagetable_t pagetable, int level)
-{
-  // there are 2^9 = 512 PTEs in a page table.
-  for(int i = 0; i < 512; i++){
-    pte_t pte = pagetable[i];
-    if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
-      // this PTE points to a lower-level page table.
-      uint64 child = PTE2PA(pte);
-      if (level == 1)
-      {
-        printf("..%d: pte %p pa %p\n", i, pte, child);
-      } else if (level == 2) {
-        printf(".. ..%d: pte %p pa %p\n", i, pte, child);
-      }
-      
-      printPTE((pagetable_t)child, level+1);
-    } else if(pte & PTE_V){
-      uint64 child = PTE2PA(pte);
-      printf(".. .. ..%d: pte %p pa %p\n", i, pte, child);
-    }
-  }
-}
-
-void
-vmprint(pagetable_t pagetable) {
-  printf("page table %p\n", pagetable);
-  printPTE(pagetable, 1);
+pagetable_t ukvminit() {
+  pagetable_t kpagetable = (pagetable_t) kalloc();
+  memset(kpagetable, 0, PGSIZE);
+  ukvmmap(kpagetable, UART0, UART0, PGSIZE, PTE_R | PTE_W);
+  ukvmmap(kpagetable, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+  ukvmmap(kpagetable, CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+  ukvmmap(kpagetable, PLIC, PLIC, 0x400000, PTE_R | PTE_W);
+  ukvmmap(kpagetable, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
+  ukvmmap(kpagetable, (uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
+  ukvmmap(kpagetable, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
+  return kpagetable;
 }
 
 // Switch h/w page table register to the kernel's page table,
@@ -153,10 +137,9 @@ kvmmap(uint64 va, uint64 pa, uint64 sz, int perm)
     panic("kvmmap");
 }
 
-void
-pkvmmap(pagetable_t pt, uint64 va, uint64 pa, uint64 sz, int perm) {
-  if(mappages(pt, va, sz, pa, perm) != 0)
-    panic("pkvmmap");
+void ukvmmap(pagetable_t kpagetable, uint64 va, uint64 pa, uint64 sz, int perm) {
+  if(mappages(kpagetable, va, sz, pa, perm) != 0)
+    panic("uvmmap");
 }
 
 // translate a kernel virtual address to
@@ -170,6 +153,7 @@ kvmpa(uint64 va)
   pte_t *pte;
   uint64 pa;
   
+  //pte = walk(kernel_pagetable, va, 0);
   pte = walk(myproc()->kpagetable, va, 0);
   if(pte == 0)
     panic("kvmpa");
@@ -417,7 +401,7 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
-  uint64 n, va0, pa0;
+  /*uint64 n, va0, pa0;
 
   while(len > 0){
     va0 = PGROUNDDOWN(srcva);
@@ -433,7 +417,8 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
     dst += n;
     srcva = va0 + PGSIZE;
   }
-  return 0;
+  return 0;*/
+  return copyin_new(pagetable, dst, srcva, len);
 }
 
 // Copy a null-terminated string from user to kernel.
@@ -443,7 +428,7 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 int
 copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 {
-  uint64 n, va0, pa0;
+  /*uint64 n, va0, pa0;
   int got_null = 0;
 
   while(got_null == 0 && max > 0){
@@ -476,5 +461,41 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return 0;
   } else {
     return -1;
+  }*/
+  return copyinstr_new(pagetable, dst, srcva, max);
+}
+
+void _vmprint(pagetable_t pagetable, int level) {
+  for (int i = 0; i < 512; i++) {
+    pte_t pte = pagetable[i];
+	if (pte & PTE_V) {
+      uint64 pa = PTE2PA(pte);
+      for (int j = 0; j < level; j++) {
+		if (j) printf(" ");
+		printf("..");
+	  }
+	  printf("%d: pte %p pa %p\n", i, pte, pa);
+	  if ((pte & (PTE_R | PTE_W | PTE_X)) == 0) {
+	    _vmprint((pagetable_t)pa, level+1);
+	  }
+	}
+  }
+}
+
+void vmprint(pagetable_t pagetable) {
+  printf("page table %p\n", pagetable);
+  _vmprint(pagetable, 1);
+}
+
+void u2kvmcopy(pagetable_t upagetable, pagetable_t kpagetable, uint64 oldsz, uint64 newsz) {
+  oldsz = PGROUNDUP(oldsz);
+  for (uint64 i = oldsz; i < newsz; i += PGSIZE) {
+    pte_t* pte_from = walk(upagetable, i, 0);
+	pte_t* pte_to = walk(kpagetable, i, 1);
+	if(pte_from == 0) panic("u2kvmcopy: src pte do not exist");
+	if(pte_to == 0) panic("u2kvmcopy: dest pte walk fail");
+	uint64 pa = PTE2PA(*pte_from);
+	uint flag = (PTE_FLAGS(*pte_from)) & (~PTE_U);
+	*pte_to = PA2PTE(pa) | flag;
   }
 }
